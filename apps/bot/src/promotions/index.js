@@ -46,7 +46,10 @@ export class Promotions {
     if (!bot.permissions.has(PermissionFlagsBits.ManageRoles)) throw Error('The bot needs Manage Roles.');
     if (member.roles.highest.position >= bot.roles.highest.position) throw Error('Move the bot role above the affected member.');
     const profile = this.profile(memberId);
-    if (profile.restriction && !profile.restriction.completedAt || [ids.disciplineRoles.suspended, ids.disciplineRoles.investigation, ids.disciplineRoles.terminated].some(id => member.roles.cache.has(id))) throw Error('Resolve the existing staff restriction before promotion.');
+    const marker = [ids.disciplineRoles.suspended, ids.disciplineRoles.investigation, ids.disciplineRoles.terminated].some(id => member.roles.cache.has(id));
+    const legacyRestriction = profile.restriction && !profile.restriction.completedAt ? profile.restriction : null;
+    const reconciledLegacy = legacyRestriction && String(legacyRestriction.id).startsWith('RESTRICT-') && ['suspended','investigation'].includes(legacyRestriction.type) && !marker && Boolean(plan.previousRankId) && profile.roleOperation?.status === 'applied' ? legacyRestriction : null;
+    if (marker || legacyRestriction && !reconciledLegacy) throw Error('An active staff restriction prevents promotion. Use /infract suspension-end or /infract investigation-end to resolve it.');
     if (['pending','uncertain'].includes(profile.roleOperation?.status) && profile.roleOperation.id !== 'PROMO-' + ownOperation) throw Error('An earlier staff role operation requires review.');
     const required = [...new Set([...plan.desired, ...plan.remove])];
     const dangerous = [PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.BanMembers, PermissionFlagsBits.KickMembers, PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.ManageWebhooks];
@@ -57,7 +60,7 @@ export class Promotions {
       if (!owner && role.position >= actor.roles.highest.position) throw Error('A required role is at or above your Discord role hierarchy.');
       if (plan.add.includes(id) && !owner && dangerous.some(p => role.permissions.has(p) && !actor.permissions.has(p))) throw Error('The destination would grant permissions you do not possess.');
     }
-    return { guild, actor, member, bot, plan, lockOverride: locked ? owner ? 'Configured owner' : 'Rank Lock Override role' : null };
+    return { guild, actor, member, bot, plan, reconciledLegacy, lockOverride: locked ? owner ? 'Configured owner' : 'Rank Lock Override role' : null };
   }
   async channels() {
     if (![this.config.assets.banner,this.config.assets.footer].every(path => fs.existsSync(path))) throw Error('The configured Promotions banner or footer is missing. Restore the supplied artwork before promoting.');
@@ -80,6 +83,7 @@ export class Promotions {
     if (typeof reason !== 'string' || reason.trim().length < 3 || reason.length > 1000) throw Error('Provide a promotion reason between 3 and 1000 characters.');
     return this.exclusive(memberId, async () => {
       const valid = await this.validate(actorId, memberId, rankId); await this.channels();
+      if(valid.reconciledLegacy){const restriction=this.profile(memberId).restriction;restriction.completedAt=Date.now();restriction.revokedBy=actorId;restriction.revocationReason='Reconciled legacy restriction: marker absent and staff rank already restored in Discord.';this.profile(memberId).status='active';await audit(actorId,'staff.legacy-restriction-reconciled',restriction.id,null,{memberId,type:restriction.type,restoredRank:valid.plan.previousRankId});this.service.store.save();await this.service.store.flush();}
       const row = await this.repository.create({ actorId, memberId, rankId, reason: reason.trim(), data: { plan: valid.plan, actorName: valid.actor.displayName || valid.actor.user.username, lockOverride: valid.lockOverride, appliedAdd: [], appliedRemove: [], pendingStep: null, dmStatus: 'pending', delivered: false } });
       await audit(actorId, 'promotion.preview', row.id, null, { memberId, rankId }); return row;
     });
