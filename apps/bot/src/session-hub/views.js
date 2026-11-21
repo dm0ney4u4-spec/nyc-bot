@@ -7,7 +7,7 @@ export const button = (custom_id, label, style = 2, disabled = false) => ({ type
 export const row = (...components) => ({ type: 1, components });
 export const safe = value => String(value ?? 'Not configured').replace(/[@`*~<>]/g, '').slice(0, 200).replace(/_/g, '\\_');
 export function serverInfo(env = process.env) {
-  const code = env.ERLC_JOIN_CODE || env.PUBLIC_ERLC_JOIN_CODE || '';
+  const code = env.ERLC_JOIN_CODE || env.PUBLIC_ERLC_JOIN_CODE || sessionConfig.server.joinCode;
   let url = env.ERLC_JOIN_URL || env.PUBLIC_ERLC_JOIN_URL || '';
   if (!url && /^[\w-]{1,64}$/.test(code)) url = 'https://erlc.gg/join/' + encodeURIComponent(code);
   try { const u = new URL(url); if (u.protocol !== 'https:' || u.hostname !== 'erlc.gg' || !/^\/join\/[\w-]{1,64}\/?$/.test(u.pathname) || u.search || u.hash || u.username || u.password || u.port) url = ''; } catch { url = ''; }

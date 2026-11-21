@@ -13,9 +13,10 @@ import { snapshotSchema } from '../apps/api/src/erlc.js';
 import { sessionPresence } from '../apps/bot/src/session-hub/presence.js';
 const config = structuredClone(sessionConfig);
 const act = (s:any, type:string, who='staff', extra:any={}, now=1000000) => transition(s, {type,...extra}, who, config, now);
-test('session presence sleeps without a session and shows genuine fresh counts only while active',()=>{
-  for(const mode of ['OFFLINE','VOTING','SHUTTING_DOWN']){const p=sessionPresence({...initialState(),mode});assert.equal(p.status,'idle');assert.equal(p.activities[0].state,'💤Sleeping');}
+test('session presence stays online and displays only fresh real player counts',()=>{
+  for(const mode of ['OFFLINE','VOTING','SHUTTING_DOWN']){const p=sessionPresence({...initialState(),mode});assert.equal(p.status,'online');assert.equal(p.activities[0].state,'In-game player count unavailable');}
   for(const mode of ['ONLINE','LOW_ACTIVITY']){const s={...initialState(),mode,current:{id:'active'},lastStats:{available:true,at:1000,players:0,capacity:50}};const p=sessionPresence(s,2000);assert.equal(p.status,'online');assert.equal(p.activities[0].state,'0/50 players in-game');assert.equal(sessionPresence(s,122000).activities[0].state,'In-game player count unavailable');assert.equal(sessionPresence({...s,lastStats:{...s.lastStats,available:false}},2000).activities[0].state,'In-game player count unavailable');}
+  assert.equal(serverInfo({}).code,'nyCRPP');assert.equal(serverInfo({}).url,'https://erlc.gg/join/nyCRPP');assert.equal(sessionPresence({...initialState(),lastStats:{available:true,at:1000,players:7,capacity:50}},2000).activities[0].state,'7/50 players in-game');
   assert.equal(serverInfo({}).name,'New York City Roleplay');assert.equal(serverInfo({}).owner,'Dm0ney_4u');assert.equal(serverInfo({ERLC_SERVER_NAME:'Override',ERLC_SERVER_OWNER:'Owner'}).name,'Override');
 });
 test('session vote toggle, one vote, threshold notification once, and no automatic start', () => {
@@ -115,7 +116,7 @@ test('PostgreSQL session integration: migrations, concurrent actions, restart, o
     });
     await t.test('shutdown confirmation, real history, no second shutdown and no automatic session',async()=>{
       await hub.interaction(interaction('session','shutdown','staff',undefined,{reason:'Finished test'}));const state=await repository.read(),id=Object.keys(state.confirmations)[0];
-      await hub.interaction(interaction('','', 'staff','nycs:shutdown-confirm:'+id));assert.equal((await repository.read()).mode,'OFFLINE');assert.equal((await repository.read()).history.length,1);assert.equal(await db.session.count({where:{activeKey:config.guildId}}),0);assert.equal(presences.at(-1).status,'idle');assert.equal(presences.at(-1).activities[0].state,'💤Sleeping');
+      await hub.interaction(interaction('','', 'staff','nycs:shutdown-confirm:'+id));assert.equal((await repository.read()).mode,'OFFLINE');assert.equal((await repository.read()).history.length,1);assert.equal(await db.session.count({where:{activeKey:config.guildId}}),0);assert.equal(presences.at(-1).status,'online');assert.notEqual(presences.at(-1).activities[0].state,'💤Sleeping');
       const count=sent.length;await hub.interaction(interaction('','', 'staff','nycs:shutdown-confirm:'+id));assert.equal((await repository.read()).history.length,1);assert.equal(sent.filter(s=>JSON.stringify(s.components).includes('# Session Shutdown')).length,1);assert.ok(sent.length>=count);
     });
     await t.test('outbox recovers send-before-receipt crash without duplicate announcement',async()=>{
