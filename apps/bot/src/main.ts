@@ -1,5 +1,6 @@
 import {Infractions,infractCommand} from './infractions/index.js';
 import {Promotions,promoteCommand} from './promotions/index.js';
+import {handleStaffPrompt} from './staff-prompts.js';
 import {isBotOwner} from './owner-access.js';
 import {regulationsTemplate,regulationsInteraction} from './regulations.js';
 import{departmentTemplate,departmentInteraction}from'./departments.js';
@@ -67,6 +68,7 @@ export function createBot(store:DatabaseStore,erlc:ErlcAdapter){
  const sessions=new Sessions(client,service,erlc);service.sessionHub=sessions;
  const infractions=new Infractions(client,service);client.on(Events.ClientReady,()=>infractions.start());client.on(Events.MessageCreate,message=>{void infractions.message(message).catch(()=>console.error('Evidence capture requires review.'));});
  const promotions=new Promotions(client,service);client.on(Events.ClientReady,()=>promotions.start());
+ client.on(Events.MessageCreate,message=>{void handleStaffPrompt(message).catch(error=>console.error('Staff prompt failed:',error?.code||error?.name||'Error'));});
  const management=async(userId:string)=>{const p=await principal(userId);if(!allowed(p,'management'))throw Error('Management access required');return p;};
  const locks=new Set<string>();
  client.on(Events.InteractionCreate,async i=>{
